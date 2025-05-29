@@ -7,6 +7,8 @@ import { getDatabase } from "firebase-admin/database";
 import dotenv from "dotenv";
 dotenv.config();
 
+
+
 // Initialize Express
 const app = express();
 app.use(cors());
@@ -16,7 +18,12 @@ app.use(express.json());
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Firebase Admin Initialization
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+if (!process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+  console.error("FIREBASE_SERVICE_ACCOUNT_KEY is missing!");
+  process.exit(1);
+}
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
