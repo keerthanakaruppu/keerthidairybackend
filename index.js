@@ -44,10 +44,12 @@ cloudinary.config({
 app.post("/upload", upload.single("image"), async (req, res) => {
   try {
     const file = req.file;
-    const uploadStream = cloudinary.uploader.upload_stream(
+    if (!file) return res.status(400).json({ error: "No file uploaded" });
+
+    const stream = cloudinary.uploader.upload_stream(
       { folder: "gallery" },
       async (error, result) => {
-        if (error) return res.status(500).json({ error });
+        if (error) return res.status(500).json({ error: error.message });
 
         const newRef = galleryRef.push();
         await newRef.set({
@@ -55,16 +57,21 @@ app.post("/upload", upload.single("image"), async (req, res) => {
           public_id: result.public_id,
         });
 
-        res.json({ url: result.secure_url, public_id: result.public_id, key: newRef.key });
+        res.json({
+          url: result.secure_url,
+          public_id: result.public_id,
+          key: newRef.key,
+        });
       }
     );
 
-    uploadStream.end(file.buffer);
+    stream.end(file.buffer);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Upload failed" });
   }
 });
+
 
 // Get All Images
 app.get("/images", async (req, res) => {
