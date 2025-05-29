@@ -3,15 +3,16 @@ import cors from "cors";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
 import admin from "firebase-admin";
-import { getDatabase } from "firebase-admin/database";
 import dotenv from "dotenv";
+
+// Load environment variables
 dotenv.config();
-
-
 
 // Initialize Express
 const app = express();
-app.use(cors());
+
+// Middleware
+app.use(cors({ origin: "https://keerthidairy.netlify.app" }));
 app.use(express.json());
 
 // Multer setup for handling multipart/form-data (file uploads)
@@ -24,13 +25,12 @@ if (!process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
 }
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
 
-
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
   databaseURL: process.env.FIREBASE_DB_URL,
 });
 
-const db = getDatabase();
+const db = admin.database();
 const galleryRef = db.ref("galleryImages");
 
 // Cloudinary Configuration
@@ -44,7 +44,7 @@ cloudinary.config({
 app.post("/upload", upload.single("image"), async (req, res) => {
   try {
     const file = req.file;
-    const result = await cloudinary.uploader.upload_stream(
+    const uploadStream = cloudinary.uploader.upload_stream(
       { folder: "gallery" },
       async (error, result) => {
         if (error) return res.status(500).json({ error });
@@ -59,9 +59,7 @@ app.post("/upload", upload.single("image"), async (req, res) => {
       }
     );
 
-    // Pipe the file buffer to Cloudinary
-    const stream = result;
-    stream.end(file.buffer);
+    uploadStream.end(file.buffer);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Upload failed" });
