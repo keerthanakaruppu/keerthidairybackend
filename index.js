@@ -12,7 +12,7 @@ dotenv.config();
 const app = express();
 
 // Middleware
-app.use(cors({ origin: "https://keerthidairy.netlify.app" }));
+app.use(cors({ origin: "https://ke.netlify.app" }));
 app.use(express.json());
 
 // Multer setup for handling multipart/form-data (file uploads)
@@ -66,7 +66,6 @@ app.post("/upload", upload.single("image"), async (req, res) => {
     );
 
     stream.end(file.buffer);
-    console.log("Uploaded to Cloudinary:", result.public_id);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Upload failed" });
@@ -95,17 +94,16 @@ app.get("/images", async (req, res) => {
 // Delete Image
 app.post("/delete", async (req, res) => {
   const { key, public_id } = req.body;
+
   try {
-    // Include the folder name if used during upload
-    await cloudinary.uploader.destroy(`gallery/${public_id}`);
+    await cloudinary.uploader.destroy(public_id);
     await galleryRef.child(key).remove();
     res.json({ success: true });
   } catch (err) {
-    console.error("Cloudinary delete error:", err);
+    console.error(err);
     res.status(500).json({ error: "Delete failed" });
   }
 });
-
 
 // Start Server
 const PORT = process.env.PORT || 4000;
