@@ -89,6 +89,7 @@ app.get("/images", async (req, res) => {
 });
 
 // Delete Image Route
+
 app.post("/delete", async (req, res) => {
   const { key, public_id } = req.body;
 
@@ -97,16 +98,42 @@ app.post("/delete", async (req, res) => {
   }
 
   try {
-    await cloudinary.uploader.destroy(public_id);
-    const imageRef = ref(database, `galleryImages/${key}`);
-    await remove(imageRef);
+    // Step 1: Delete from Cloudinary
+    const result = await cloudinary.uploader.destroy(public_id);
 
-    res.json({ success: true });
+    if (result.result !== "ok") {
+      console.error("Cloudinary delete failed:", result);
+      return res.status(500).json({ error: "Cloudinary deletion failed" });
+    }
+
+    // Step 2: Remove from Firebase
+    await galleryRef.child(key).remove();
+
+    return res.json({ success: true });
   } catch (err) {
-    console.error("Delete Error:", err);
-    res.status(500).json({ error: "Delete failed" });
+    console.error("Deletion error:", err);
+    return res.status(500).json({ error: "Delete failed" });
   }
 });
+
+// app.post("/delete", async (req, res) => {
+//   const { key, public_id } = req.body;
+
+//   if (!key || !public_id) {
+//     return res.status(400).json({ error: "Missing key or public_id" });
+//   }
+
+//   try {
+//     await cloudinary.uploader.destroy(public_id);
+//     const imageRef = ref(database, `galleryImages/${key}`);
+//     await remove(imageRef);
+
+//     res.json({ success: true });
+//   } catch (err) {
+//     console.error("Delete Error:", err);
+//     res.status(500).json({ error: "Delete failed" });
+//   }
+// });
 
 // Start Server
 const PORT = process.env.PORT || 4000;
