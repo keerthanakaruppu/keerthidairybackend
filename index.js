@@ -12,7 +12,7 @@ dotenv.config();
 const app = express();
 
 // Middleware
-app.use(cors({ origin: "https://ke.netlify.app" }));
+app.use(cors({ origin: "https://keerthidairy.netlify.app" }));
 app.use(express.json());
 
 // Multer setup for handling multipart/form-data (file uploads)
