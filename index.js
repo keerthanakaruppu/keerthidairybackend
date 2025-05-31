@@ -3,8 +3,18 @@ import cors from "cors";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
 import dotenv from "dotenv";
-import { initializeApp } from "firebase/app";
-import { getDatabase, ref, set, get, remove, child } from "firebase/database";
+import admin from "firebase-admin";
+import { getDatabase } from "firebase-admin/database";
+
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: process.env.FIREBASE_DB_URL,
+});
+
+const db = getDatabase();
+const galleryRef = db.ref("galleryImages");
 
 // Load environment variables from .env file
 dotenv.config();
