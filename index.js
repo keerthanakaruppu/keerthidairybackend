@@ -6,7 +6,7 @@ import dotenv from "dotenv";
 import admin from "firebase-admin";
 import { getDatabase } from "firebase-admin/database";
 
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
