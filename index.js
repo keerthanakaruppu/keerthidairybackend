@@ -10,6 +10,10 @@ import nodemailer from "nodemailer";
 // Load environment variables
 dotenv.config();
 
+const app = express();
+app.use(cors({ origin: "https://keerthidairy.netlify.app" }));
+app.use(express.json());
+
 
 let currentOTP = null;
 let otpExpiresAt = null;
@@ -58,9 +62,7 @@ app.post("/verify-otp", (req, res) => {
 
 
 
-const app = express();
-app.use(cors({ origin: "https://keerthidairy.netlify.app" }));
-app.use(express.json());
+
 
 // Protect routes with simple API key (optional)
 app.use((req, res, next) => {
