@@ -54,36 +54,47 @@ cloudinary.config({
 });
 
 // Upload image
-app.post("/upload", upload.single("image"), async (req, res) => {
+app.post("/upload", upload.array("images"), async (req, res) => {
   try {
-    const file = req.file;
-    if (!file) return res.status(400).json({ error: "No file uploaded" });
+    const files = req.files;
+    if (!files || files.length === 0) {
+      return res.status(400).json({ error: "No files uploaded" });
+    }
 
-    const stream = cloudinary.uploader.upload_stream(
-      { folder: "gallery" }, //keerthidairy
-      async (error, result) => {
-        if (error) return res.status(500).json({ error: error.message });
+    const uploadedImages = [];
 
-        const newRef = galleryRef.push();
-        await newRef.set({
-          url: result.secure_url,
-          public_id: result.public_id,
-        });
+    const uploadPromises = files.map((file) => {
+      return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: "gallery" },
+          async (error, result) => {
+            if (error) return reject(error);
 
-        res.json({
-          url: result.secure_url,
-          public_id: result.public_id,
-          key: newRef.key,
-        });
-      }
-    );
+            const newRef = galleryRef.push();
+            await newRef.set({
+              url: result.secure_url,
+              public_id: result.public_id,
+            });
 
-    stream.end(file.buffer);
+            resolve({
+              key: newRef.key,
+              url: result.secure_url,
+              public_id: result.public_id,
+            });
+          }
+        );
+        stream.end(file.buffer);
+      });
+    });
+
+    const results = await Promise.all(uploadPromises);
+    res.json({ success: true, images: results });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Upload failed" });
   }
 });
+
 
 // Get all images
 app.get("/images", async (req, res) => {
