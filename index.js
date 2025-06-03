@@ -68,7 +68,7 @@ app.post("/login", async (req, res) => {
   const { email, password } = req.body;
   usersRef.once("value", (snapshot) => {
     const data = snapshot.val();
-    if (data && data.email === email && data.password === password) {
+    if (data && data.email === email && String(data.password) === String(password)){
       req.session.loggedIn = true;
       res.json({ success: true });
     } else {
