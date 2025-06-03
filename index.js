@@ -1,79 +1,39 @@
 import express from "express";
+import session from "express-session";
 import cors from "cors";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
 import admin from "firebase-admin";
 import dotenv from "dotenv";
-import nodemailer from "nodemailer";
 
-
-// Load environment variables
 dotenv.config();
 
 const app = express();
-app.use(cors({ origin: "https://keerthidairy.netlify.app" }));
 app.use(express.json());
+app.use(cors({
+  origin: "https://keerthidairy.netlify.app",
+  credentials: true,
+}));
 
-
-let currentOTP = null;
-let otpExpiresAt = null;
-
-// Login handler
-app.post("/login", async (req, res) => {
-  const { email, password } = req.body;
-
-  try {
-    const snapshot = await admin.database().ref("admin").once("value");
-    const adminData = snapshot.val();
-
-    if (!adminData) return res.status(500).json({ success: false, error: "No admin credentials found" });
-
-    const isValid = adminData.email === email && adminData.password === password;
-
-    if (isValid) {
-      return res.json({ success: true });
-    } else {
-      return res.status(401).json({ success: false, error: "Invalid credentials" });
-    }
-  } catch (err) {
-    console.error("Login error:", err);
-    return res.status(500).json({ success: false, error: "Internal server error" });
+app.use(session({
+  secret: process.env.SESSION_SECRET || "super-secret-key",
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: true,
+    sameSite: "none",
+    maxAge: 1000 * 60 * 60, // 1 hour
   }
-});
-
-
-// Protect routes with simple API key (optional)
-app.use((req, res, next) => {
-  const clientKey = req.headers["x-api-key"];
-  if (process.env.API_KEY && clientKey !== process.env.API_KEY) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  next();
-});
-
-// Multer setup - only allow image uploads
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-  fileFilter: (req, file, cb) => {
-    if (!file.mimetype.startsWith("image/")) {
-      return cb(new Error("Only image files are allowed"), false);
-    }
-    cb(null, true);
-  },
-});
+}));
 
 // Firebase setup
-if (!process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-  console.error("Missing FIREBASE_SERVICE_ACCOUNT_KEY!");
-  process.exit(1);
-}
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
   databaseURL: process.env.FIREBASE_DB_URL,
 });
 const db = admin.database();
+const usersRef = db.ref("login");
 const galleryRef = db.ref("galleryImages");
 
 // Cloudinary setup
@@ -83,36 +43,69 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Upload image
-app.post("/upload", upload.array("images"), async (req, res) => {
+// Multer setup
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith("image/")) {
+      return cb(new Error("Only image files are allowed"), false);
+    }
+    cb(null, true);
+  },
+});
+
+// Middleware to protect routes
+function isAuthenticated(req, res, next) {
+  if (req.session && req.session.loggedIn) {
+    return next();
+  }
+  return res.status(401).json({ error: "Unauthorized" });
+}
+
+// 🔐 LOGIN ROUTE
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+  usersRef.once("value", (snapshot) => {
+    const data = snapshot.val();
+    if (data && data.email === email && data.password === password) {
+      req.session.loggedIn = true;
+      res.json({ success: true });
+    } else {
+      res.status(401).json({ error: "Invalid email or password" });
+    }
+  });
+});
+
+// 🚪 LOGOUT
+app.post("/logout", (req, res) => {
+  req.session.destroy();
+  res.json({ success: true });
+});
+
+// 📤 UPLOAD IMAGES (protected)
+app.post("/upload", isAuthenticated, upload.array("images"), async (req, res) => {
   try {
     const files = req.files;
     if (!files || files.length === 0) {
       return res.status(400).json({ error: "No files uploaded" });
     }
 
-    const uploadedImages = [];
-
-    const uploadPromises = files.map((file) => {
+    const uploadPromises = files.map(file => {
       return new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          { folder: "gallery" },
-          async (error, result) => {
-            if (error) return reject(error);
-
-            const newRef = galleryRef.push();
-            await newRef.set({
-              url: result.secure_url,
-              public_id: result.public_id,
-            });
-
-            resolve({
-              key: newRef.key,
-              url: result.secure_url,
-              public_id: result.public_id,
-            });
-          }
-        );
+        const stream = cloudinary.uploader.upload_stream({ folder: "gallery" }, async (error, result) => {
+          if (error) return reject(error);
+          const newRef = galleryRef.push();
+          await newRef.set({
+            url: result.secure_url,
+            public_id: result.public_id,
+          });
+          resolve({
+            key: newRef.key,
+            url: result.secure_url,
+            public_id: result.public_id,
+          });
+        });
         stream.end(file.buffer);
       });
     });
@@ -125,34 +118,25 @@ app.post("/upload", upload.array("images"), async (req, res) => {
   }
 });
 
-
-// Get all images
-app.get("/images", async (req, res) => {
-  try {
-    galleryRef.once("value", (snapshot) => {
-      const data = snapshot.val();
-      if (!data) return res.json([]);
-
-      const images = Object.entries(data).map(([key, value]) => ({
-        key,
-        url: value.url,
-        public_id: value.public_id,
-      }));
-
-      // Optional: reverse to show newest first
-      images.reverse();
-      res.json(images);
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Error fetching images" });
-  }
+// 📥 GET IMAGES (protected)
+app.get("/images", isAuthenticated, async (req, res) => {
+  galleryRef.once("value", (snapshot) => {
+    const data = snapshot.val();
+    const images = data
+      ? Object.entries(data).map(([key, value]) => ({
+          key,
+          url: value.url,
+          public_id: value.public_id,
+        }))
+      : [];
+    images.reverse();
+    res.json(images);
+  });
 });
 
-// Delete image
-app.post("/delete", async (req, res) => {
+// 🗑️ DELETE IMAGE (protected)
+app.post("/delete", isAuthenticated, async (req, res) => {
   const { key, public_id } = req.body;
-
   try {
     await cloudinary.uploader.destroy(public_id);
     await galleryRef.child(key).remove();
@@ -163,16 +147,5 @@ app.post("/delete", async (req, res) => {
   }
 });
 
-// Global error handling for multer or others
-app.use((err, req, res, next) => {
-  if (err instanceof multer.MulterError || err.message.includes("image")) {
-    return res.status(400).json({ error: err.message });
-  }
-  res.status(500).json({ error: "Unexpected error occurred" });
-});
-
-// Start server
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
