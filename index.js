@@ -18,50 +18,28 @@ app.use(express.json());
 let currentOTP = null;
 let otpExpiresAt = null;
 
-// Send OTP to email
-app.post("/send-otp", async (req, res) => {
+// Login handler
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+
   try {
-    // Generate 6-digit OTP
-    currentOTP = Math.floor(100000 + Math.random() * 900000).toString();
-    otpExpiresAt = Date.now() + 5 * 60 * 1000; // OTP valid for 5 mins
+    const snapshot = await admin.database().ref("admin").once("value");
+    const adminData = snapshot.val();
 
-    // Setup transporter (use your Gmail credentials or custom SMTP)
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER, // e.g., your Gmail
-        pass: process.env.EMAIL_PASS, // app password or real password
-      },
-    });
+    if (!adminData) return res.status(500).json({ success: false, error: "No admin credentials found" });
 
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: "keerthanakaruppu111@gmail.com",
-      subject: "Keerthi Dairy Gallery OTP",
-      text: `Your OTP is: ${currentOTP}`,
-    };
+    const isValid = adminData.email === email && adminData.password === password;
 
-    await transporter.sendMail(mailOptions);
-    res.json({ success: true });
+    if (isValid) {
+      return res.json({ success: true });
+    } else {
+      return res.status(401).json({ success: false, error: "Invalid credentials" });
+    }
   } catch (err) {
-    console.error("Failed to send OTP:", err);
-    res.status(500).json({ error: "Failed to send OTP" });
+    console.error("Login error:", err);
+    return res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
-
-app.post("/verify-otp", (req, res) => {
-  const { otp } = req.body;
-  if (Date.now() > otpExpiresAt) {
-    return res.status(400).json({ error: "OTP expired" });
-  }
-  if (otp === currentOTP) {
-    return res.json({ success: true });
-  }
-  res.status(400).json({ error: "Invalid OTP" });
-});
-
-
-
 
 
 // Protect routes with simple API key (optional)
