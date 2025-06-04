@@ -21,6 +21,7 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     secure: true,
+    httpOnly: true,
     sameSite: "none",
     maxAge: 1000 * 60 * 60, // 1 hour
   }
@@ -62,6 +63,12 @@ function isAuthenticated(req, res, next) {
   }
   return res.status(401).json({ error: "Unauthorized" });
 }
+
+
+app.get("/check-auth", (req, res) => {
+  res.json({ loggedIn: !!req.session.loggedIn });
+});
+
 
 // 🔐 LOGIN ROUTE
 app.post("/login", async (req, res) => {
