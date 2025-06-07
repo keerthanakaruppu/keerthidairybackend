@@ -98,7 +98,7 @@ app.post("/login", (req, res) => {
 
 // ✅ Auth check route
 const router = express.Router();
-router.get('/verify-token', (req, res) => {
+router.get('/check-auth', (req, res) => {
   const token = req.cookies.token;
   if (!token) {
     return res.status(401).json({ success: false, message: 'No token' });
