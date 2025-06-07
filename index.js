@@ -77,7 +77,7 @@ function verifyToken(req, res, next) {
 }
 
 // verify token route
-const jwt = require("jsonwebtoken");
+// const jwt = require("jsonwebtoken");
 
 app.get("/verify-token", (req, res) => {
   const authHeader = req.headers.authorization;
@@ -114,7 +114,7 @@ app.post("/login", async (req, res) => {
   });
 });
 
-// 🚪 LOGOUT
+
 
 
 // 📤 UPLOAD IMAGES (protected)
