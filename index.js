@@ -82,7 +82,7 @@ app.post("/login", (req, res) => {
   usersRef.once("value", (snapshot) => {
     const data = snapshot.val();
     if (data && data.email === email && String(data.password) === String(password)) {
-      const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: "1h" });
+      const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: "1h" });
       res.cookie("token", token, {
         httpOnly: true,
         secure: true,
