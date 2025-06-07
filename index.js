@@ -97,17 +97,24 @@ app.post("/login", (req, res) => {
 });
 
 // ✅ Auth check route
-app.get("/check-auth", (req, res) => {
+const router = express.Router();
+router.get('/verify-token', (req, res) => {
   const token = req.cookies.token;
-  if (!token) return res.json({ loggedIn: false });
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'No token' });
+  }
 
   try {
-    jwt.verify(token, JWT_SECRET);
-    res.json({ loggedIn: true });
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    return res.status(200).json({ success: true });
   } catch (err) {
-    res.json({ loggedIn: false });
+    return res.status(401).json({ success: false, message: 'Invalid token' });
   }
 });
+
+module.exports = router;
+
+
 
 // 📤 Upload Images
 app.post("/upload", verifyToken, upload.array("images"), async (req, res) => {
