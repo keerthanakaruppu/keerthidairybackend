@@ -24,6 +24,7 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     secure: true,
+    httpOnly: true,
     sameSite: "none",
     maxAge: 1000 * 60 * 60, // 1 hour
   }
@@ -77,8 +78,6 @@ function verifyToken(req, res, next) {
 }
 
 // verify token route
-// const jwt = require("jsonwebtoken");
-
 app.get("/verify-token", (req, res) => {
   const authHeader = req.headers.authorization;
 
