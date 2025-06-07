@@ -6,12 +6,13 @@ import { v2 as cloudinary } from "cloudinary";
 import admin from "firebase-admin";
 import dotenv from "dotenv";
 import jwt from "jsonwebtoken";
-
+import cookieParser from "cookie-parser";
 
 dotenv.config();
 
 const app = express();
 app.use(express.json());
+app.use(cookieParser());
 
 app.use(cors({
   origin: "https://keerthidairy.netlify.app",
@@ -26,8 +27,8 @@ app.use(session({
     secure: true,
     httpOnly: true,
     sameSite: "none",
-    maxAge: 1000 * 60 * 60, // 1 hour
-  }
+    maxAge: 1000 * 60 * 60,
+  },
 }));
 
 // Firebase setup
@@ -59,15 +60,13 @@ const upload = multer({
   },
 });
 
-// JWT secret
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-jwt";
 
-// JWT middleware
+// ✅ Middleware to check JWT from cookies
 function verifyToken(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: "Missing token" });
+  const token = req.cookies.token;
+  if (!token) return res.status(401).json({ error: "Unauthorized" });
 
-  const token = authHeader.split(" ")[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;
@@ -77,52 +76,44 @@ function verifyToken(req, res, next) {
   }
 }
 
-// verify token route
-app.get("/verify-token", (req, res) => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Token missing" });
-  }
-
-  const token = authHeader.split(" ")[1];
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) {
-      return res.status(403).json({ error: "Invalid token" });
-    }
-
-    // Optional: attach decoded user info
-    req.user = decoded;
-    res.json({ valid: true });
-  });
-});
-
-
-// 🔐 LOGIN ROUTE
-app.post("/login", async (req, res) => {
+// 🔐 Login route (sets cookie)
+app.post("/login", (req, res) => {
   const { email, password } = req.body;
   usersRef.once("value", (snapshot) => {
     const data = snapshot.val();
     if (data && data.email === email && String(data.password) === String(password)) {
       const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: "1h" });
-      res.json({ success: true, token });
+      res.cookie("token", token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+        maxAge: 60 * 60 * 1000, // 1 hour
+      });
+      res.json({ success: true });
     } else {
-      res.status(401).json({ error: "Invalid email or password" });
+      res.status(401).json({ error: "Invalid credentials" });
     }
   });
 });
 
+// ✅ Auth check route
+app.get("/check-auth", (req, res) => {
+  const token = req.cookies.token;
+  if (!token) return res.json({ loggedIn: false });
 
+  try {
+    jwt.verify(token, JWT_SECRET);
+    res.json({ loggedIn: true });
+  } catch (err) {
+    res.json({ loggedIn: false });
+  }
+});
 
-
-// 📤 UPLOAD IMAGES (protected)
+// 📤 Upload Images
 app.post("/upload", verifyToken, upload.array("images"), async (req, res) => {
   try {
     const files = req.files;
-    if (!files || files.length === 0) {
-      return res.status(400).json({ error: "No files uploaded" });
-    }
+    if (!files.length) return res.status(400).json({ error: "No files uploaded" });
 
     const uploadPromises = files.map(file => {
       return new Promise((resolve, reject) => {
@@ -133,11 +124,7 @@ app.post("/upload", verifyToken, upload.array("images"), async (req, res) => {
             url: result.secure_url,
             public_id: result.public_id,
           });
-          resolve({
-            key: newRef.key,
-            url: result.secure_url,
-            public_id: result.public_id,
-          });
+          resolve({ key: newRef.key, url: result.secure_url, public_id: result.public_id });
         });
         stream.end(file.buffer);
       });
@@ -151,7 +138,7 @@ app.post("/upload", verifyToken, upload.array("images"), async (req, res) => {
   }
 });
 
-// 📥 GET IMAGES (protected)
+// 📥 Get Images
 app.get("/images", verifyToken, async (req, res) => {
   galleryRef.once("value", (snapshot) => {
     const data = snapshot.val();
@@ -167,7 +154,7 @@ app.get("/images", verifyToken, async (req, res) => {
   });
 });
 
-// 🗑️ DELETE IMAGE (protected)
+// 🗑️ Delete Image
 app.post("/delete", verifyToken, async (req, res) => {
   const { key, public_id } = req.body;
   try {
