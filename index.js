@@ -112,7 +112,8 @@ router.get('/verify-token', (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;
+
 
 
 
