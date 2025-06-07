@@ -5,6 +5,8 @@ import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
 import admin from "firebase-admin";
 import dotenv from "dotenv";
+import jwt from "jsonwebtoken";
+
 
 dotenv.config();
 
@@ -56,18 +58,36 @@ const upload = multer({
   },
 });
 
-// Middleware to protect routes
-function isAuthenticated(req, res, next) {
-  if (req.session && req.session.loggedIn) {
-    return next();
+// JWT secret
+const JWT_SECRET = process.env.JWT_SECRET || "super-secret-jwt";
+
+// JWT middleware
+function verifyToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: "Missing token" });
+
+  const token = authHeader.split(" ")[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(403).json({ error: "Invalid token" });
   }
-  return res.status(401).json({ error: "Unauthorized" });
 }
 
+// Middleware to protect routes
+// function isAuthenticated(req, res, next) {
+//   if (req.session && req.session.loggedIn) {
+//     return next();
+//   }
+//   return res.status(401).json({ error: "Unauthorized" });
+// }
 
-app.get("/check-auth", (req, res) => {
-  res.json({ loggedIn: !!req.session.loggedIn });
-});
+
+// app.get("/check-auth", (req, res) => {
+//   res.json({ loggedIn: !!req.session.loggedIn });
+// });
 
 
 // 🔐 LOGIN ROUTE
@@ -75,9 +95,9 @@ app.post("/login", async (req, res) => {
   const { email, password } = req.body;
   usersRef.once("value", (snapshot) => {
     const data = snapshot.val();
-    if (data && data.email === email && String(data.password) === String(password)){
-      req.session.loggedIn = true;
-      res.json({ success: true });
+    if (data && data.email === email && String(data.password) === String(password)) {
+      const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: "1h" });
+      res.json({ success: true, token });
     } else {
       res.status(401).json({ error: "Invalid email or password" });
     }
@@ -91,7 +111,7 @@ app.post("/logout", (req, res) => {
 });
 
 // 📤 UPLOAD IMAGES (protected)
-app.post("/upload", isAuthenticated, upload.array("images"), async (req, res) => {
+app.post("/upload", verifyToken, upload.array("images"), async (req, res) => {
   try {
     const files = req.files;
     if (!files || files.length === 0) {
@@ -126,7 +146,7 @@ app.post("/upload", isAuthenticated, upload.array("images"), async (req, res) =>
 });
 
 // 📥 GET IMAGES (protected)
-app.get("/images", isAuthenticated, async (req, res) => {
+app.get("/images", verifyToken, async (req, res) => {
   galleryRef.once("value", (snapshot) => {
     const data = snapshot.val();
     const images = data
@@ -142,7 +162,7 @@ app.get("/images", isAuthenticated, async (req, res) => {
 });
 
 // 🗑️ DELETE IMAGE (protected)
-app.post("/delete", isAuthenticated, async (req, res) => {
+app.post("/delete", verifyToken, async (req, res) => {
   const { key, public_id } = req.body;
   try {
     await cloudinary.uploader.destroy(public_id);
