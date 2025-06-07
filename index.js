@@ -11,25 +11,27 @@ import cookieParser from "cookie-parser";
 dotenv.config();
 
 const app = express();
-app.use(express.json());
-app.use(cookieParser());
+
 
 app.use(cors({
   origin: "https://keerthidairy.netlify.app",
   credentials: true,
 }));
 
-app.use(session({
-  secret: process.env.SESSION_SECRET || "super-secret-key",
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: true,
-    httpOnly: true,
-    sameSite: "none",
-    maxAge: 1000 * 60 * 60,
-  },
-}));
+app.use(express.json());
+app.use(cookieParser());
+
+// app.use(session({
+//   secret: process.env.SESSION_SECRET || "super-secret-key",
+//   resave: false,
+//   saveUninitialized: false,
+//   cookie: {
+//     secure: true,
+//     httpOnly: true,
+//     sameSite: "none",
+//     maxAge: 1000 * 60 * 60,
+//   },
+// }));
 
 // Firebase setup
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
