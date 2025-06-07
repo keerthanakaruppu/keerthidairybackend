@@ -1,5 +1,4 @@
 import express from "express";
-import session from "express-session";
 import cors from "cors";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
@@ -12,26 +11,15 @@ dotenv.config();
 
 const app = express();
 
-
 app.use(cors({
   origin: "https://keerthidairy.netlify.app",
-  credentials: true,
+  credentials: true,  // Allow sending and receiving cookies cross-origin
 }));
 
 app.use(express.json());
 app.use(cookieParser());
 
-// app.use(session({
-//   secret: process.env.SESSION_SECRET || "super-secret-key",
-//   resave: false,
-//   saveUninitialized: false,
-//   cookie: {
-//     secure: true,
-//     httpOnly: true,
-//     sameSite: "none",
-//     maxAge: 1000 * 60 * 60,
-//   },
-// }));
+const JWT_SECRET = process.env.JWT_SECRET || "super-secret-jwt";
 
 // Firebase setup
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
@@ -62,9 +50,7 @@ const upload = multer({
   },
 });
 
-const JWT_SECRET = process.env.JWT_SECRET || "super-secret-jwt";
-
-// ✅ Middleware to check JWT from cookies
+// Middleware to verify JWT token from cookies
 function verifyToken(req, res, next) {
   const token = req.cookies.token;
   if (!token) return res.status(401).json({ error: "Unauthorized" });
@@ -78,48 +64,47 @@ function verifyToken(req, res, next) {
   }
 }
 
-// 🔐 Login route (sets cookie)
+// LOGIN route: verify credentials, set JWT cookie
 app.post("/login", (req, res) => {
   const { email, password } = req.body;
+
   usersRef.once("value", (snapshot) => {
     const data = snapshot.val();
+
     if (data && data.email === email && String(data.password) === String(password)) {
-      const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: "1h" });
+      const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: "1h" });
+
       res.cookie("token", token, {
         httpOnly: true,
-        secure: true,
-        sameSite: "none",
-        maxAge: 60 * 60 * 1000, // 1 hour
+        secure: true,       // Must be true on HTTPS (Netlify & Render use HTTPS)
+        sameSite: "none",   // Needed for cross-origin cookie sending
+        maxAge: 60 * 60 * 1000, // 1 hour in milliseconds
       });
-      res.json({ success: true });
+
+      return res.json({ success: true });
     } else {
-      res.status(401).json({ error: "Invalid credentials" });
+      return res.status(401).json({ error: "Invalid credentials" });
     }
   });
 });
 
-// ✅ Auth check route
-const router = express.Router();
-router.get('/check-auth', (req, res) => {
+// AUTH CHECK route — called by frontend to verify token validity
+app.get("/check-auth", (req, res) => {
   const token = req.cookies.token;
+
   if (!token) {
-    return res.status(401).json({ success: false, message: 'No token' });
+    return res.status(401).json({ success: false, message: "No token" });
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    jwt.verify(token, JWT_SECRET);
     return res.status(200).json({ success: true });
   } catch (err) {
-    return res.status(401).json({ success: false, message: 'Invalid token' });
+    return res.status(401).json({ success: false, message: "Invalid token" });
   }
 });
 
-export default router;
-
-
-
-
-// 📤 Upload Images
+// UPLOAD images
 app.post("/upload", verifyToken, upload.array("images"), async (req, res) => {
   try {
     const files = req.files;
@@ -129,11 +114,13 @@ app.post("/upload", verifyToken, upload.array("images"), async (req, res) => {
       return new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream({ folder: "gallery" }, async (error, result) => {
           if (error) return reject(error);
+
           const newRef = galleryRef.push();
           await newRef.set({
             url: result.secure_url,
             public_id: result.public_id,
           });
+
           resolve({ key: newRef.key, url: result.secure_url, public_id: result.public_id });
         });
         stream.end(file.buffer);
@@ -148,7 +135,7 @@ app.post("/upload", verifyToken, upload.array("images"), async (req, res) => {
   }
 });
 
-// 📥 Get Images
+// GET images
 app.get("/images", verifyToken, async (req, res) => {
   galleryRef.once("value", (snapshot) => {
     const data = snapshot.val();
@@ -164,7 +151,7 @@ app.get("/images", verifyToken, async (req, res) => {
   });
 });
 
-// 🗑️ Delete Image
+// DELETE image
 app.post("/delete", verifyToken, async (req, res) => {
   const { key, public_id } = req.body;
   try {
