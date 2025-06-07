@@ -76,18 +76,28 @@ function verifyToken(req, res, next) {
   }
 }
 
-// Middleware to protect routes
-// function isAuthenticated(req, res, next) {
-//   if (req.session && req.session.loggedIn) {
-//     return next();
-//   }
-//   return res.status(401).json({ error: "Unauthorized" });
-// }
+// verify token route
+const jwt = require("jsonwebtoken");
 
+app.get("/verify-token", (req, res) => {
+  const authHeader = req.headers.authorization;
 
-// app.get("/check-auth", (req, res) => {
-//   res.json({ loggedIn: !!req.session.loggedIn });
-// });
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Token missing" });
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ error: "Invalid token" });
+    }
+
+    // Optional: attach decoded user info
+    req.user = decoded;
+    res.json({ valid: true });
+  });
+});
 
 
 // 🔐 LOGIN ROUTE
@@ -105,10 +115,7 @@ app.post("/login", async (req, res) => {
 });
 
 // 🚪 LOGOUT
-app.post("/logout", (req, res) => {
-  req.session.destroy();
-  res.json({ success: true });
-});
+
 
 // 📤 UPLOAD IMAGES (protected)
 app.post("/upload", verifyToken, upload.array("images"), async (req, res) => {
